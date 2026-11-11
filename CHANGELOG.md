@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-11
+
+### Added
+- Consumer side for the broker transports: `RabbitMqTransport::receive(AMQPMessage)` and `RedisStreamsTransport::receive($stream, $fields)` return a `ReceivedMessage` (CloudEvents attributes, headers, body, decoded payload); messages without the attributes are refused with `UnexpectedValueException`.
+
+### Changed
+- Kafka transport and the `docker compose` demo moved to the 0.3.0 roadmap.
+
 ## [0.1.0] - 2026-11-11
 
 ### Added
@@ -23,9 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - At-least-once delivery; consumers must be idempotent (use the inbox).
 - Publishing several aggregates in one transaction in different orders can deadlock.
 
-### Planned for 0.2.0
+### Planned (now 0.3.0)
 - Kafka transport (ext-rdkafka, key = aggregate id).
 - `docker compose` demo: MySQL + RabbitMQ + relay + a consumer with the inbox.
 
-[Unreleased]: https://github.com/azhimov/laravel-outbox/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/azhimov/laravel-outbox/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/azhimov/laravel-outbox/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/azhimov/laravel-outbox/releases/tag/v0.1.0

@@ -148,6 +148,26 @@ final class OrderPaid implements \Azhimov\Outbox\Contracts\ShouldBeOutboxed
 DB::transaction(fn () => Outbox::publishEvent(new OrderPaid($order)));
 ```
 
+### On the consumer side: reading from the broker
+
+The transports can turn what they published back into a `ReceivedMessage` (id, type, source, subject, time, topic, headers, body, payload), so a consumer does not need to know where the CloudEvents attributes live:
+
+```php
+use Azhimov\Outbox\Facades\Inbox;
+use Azhimov\Outbox\Transports\RabbitMqTransport;
+use PhpAmqpLib\Message\AMQPMessage;
+
+$channel->basic_consume('ledger', callback: function (AMQPMessage $amqp): void {
+    $message = RabbitMqTransport::receive($amqp);   // UnexpectedValueException if it is not ours
+
+    Inbox::handle('ledger', $message->id, fn () => Ledger::post($message->payload));
+
+    $amqp->ack();                                   // only after the inbox transaction committed
+});
+```
+
+Redis Streams: `app(TransportManager::class)->driver('redis')->receive($stream, $fields)` for an entry from `XREAD` / `XREADGROUP`. The topic is the stream name without `stream_prefix`.
+
 ### On the consumer side: inbox
 
 Delivery is at-least-once, so a consumer can see a message twice. The inbox stores a "processed" mark **in the same transaction** as your handler's changes:
@@ -344,12 +364,12 @@ If you already use Ecotone, use its outbox. If one relay is enough, `ianfoxdev/o
 - **MySQL claims lock briefly.** Under REPEATABLE READ, the claim query also locks rows it scanned and filtered out until its transaction ends, a few milliseconds. Other workers skip them, so a worker may see an empty batch while work remains. That costs latency, not correctness.
 - **SQLite is for tests only.** There are no row locks, so run one relay worker.
 - **`RefreshDatabase` hides a missing transaction.** Use `Outbox::fake()` in application tests.
-- **No Kafka yet**; it's planned for 0.2.
+- **No Kafka yet**; it's planned for 0.3.
 
 ## Roadmap
 
-- 0.2: Kafka transport (ext-rdkafka, key = aggregate id).
-- 0.2: a `docker compose` demo: MySQL + RabbitMQ + relay + a consumer with the inbox (with payments-outbox).
+- 0.3: Kafka transport (ext-rdkafka, key = aggregate id).
+- 0.3: a `docker compose` demo: relay + a consumer with the inbox (with payments-outbox).
 - Prometheus metrics for the relay: lag, attempts, dead letters.
 
 ## Testing
