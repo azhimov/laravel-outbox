@@ -5,8 +5,15 @@ declare(strict_types=1);
 namespace Azhimov\Outbox\Relay;
 
 use Azhimov\Outbox\Contracts\Transport;
+use Azhimov\Outbox\Events\AggregateBlocked;
+use Azhimov\Outbox\Events\LeaseLost;
+use Azhimov\Outbox\Events\MessageFailed;
+use Azhimov\Outbox\Events\MessagePublished;
+use Azhimov\Outbox\Events\MessagePublishFailed;
+use Azhimov\Outbox\Support\MessageId;
 use Azhimov\Outbox\Support\MessageStatus;
 use Azhimov\Outbox\Support\OutboxMessage;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Date;
@@ -41,6 +48,7 @@ final class Relay
         private readonly string $table,
         private readonly Transport $transport,
         private readonly RelayOptions $options,
+        private readonly Dispatcher $events,
         ?Backoff $backoff = null,
     ) {
         $this->owner = bin2hex(random_bytes(16));
@@ -74,13 +82,13 @@ final class Relay
     {
         $now = self::now();
 
-        [$ids, $deadLettered] = $this->connection->transaction(function () use ($now): array {
+        [$ids, $exhausted] = $this->connection->transaction(function () use ($now): array {
             $rows = $this->claimable($now)
                 ->orderBy('created_at')
                 ->orderBy('id')
                 ->limit($this->options->batchSize)
                 ->lock('for update skip locked')
-                ->get(['id', 'status', 'attempts']);
+                ->get(['id', 'type', 'aggregate_id', 'status', 'attempts']);
 
             $claim = [];
             $exhausted = [];
@@ -93,18 +101,21 @@ final class Relay
                 $attempts = is_numeric($row->attempts) ? (int) $row->attempts : 0;
 
                 if ($row->status === MessageStatus::Processing->value && $attempts >= $this->options->maxAttempts) {
-                    $exhausted[] = $id;
+                    $exhausted[$id] = [
+                        is_string($row->type) ? $row->type : '',
+                        is_string($row->aggregate_id) ? $row->aggregate_id : null,
+                    ];
                 } else {
                     $claim[] = $id;
                 }
             }
 
             if ($exhausted !== []) {
-                $this->table()->whereIn('id', $exhausted)->update([
+                $this->table()->whereIn('id', array_keys($exhausted))->update([
                     'status' => MessageStatus::Failed->value,
                     'lease_owner' => null,
                     'lease_until' => null,
-                    'last_error' => "Lease expired after {$this->options->maxAttempts} attempts: the worker stopped while delivering.",
+                    'last_error' => $this->leaseExpiredReason(),
                 ]);
             }
 
@@ -116,8 +127,14 @@ final class Relay
                 ]);
             }
 
-            return [$claim, count($exhausted)];
+            return [$claim, $exhausted];
         });
+
+        foreach ($exhausted as $id => [$type, $aggregateId]) {
+            $this->deadLettered(MessageId::fromString((string) $id), $type, $aggregateId, $this->leaseExpiredReason());
+        }
+
+        $deadLettered = count($exhausted);
 
         if ($ids === []) {
             return [[], $deadLettered];
@@ -150,7 +167,15 @@ final class Relay
             'lease_until' => null,
         ]);
 
-        return $marked === 1 ? DeliveryOutcome::Published : DeliveryOutcome::LeaseLost;
+        if ($marked === 1) {
+            $this->events->dispatch(new MessagePublished($message));
+
+            return DeliveryOutcome::Published;
+        }
+
+        $this->events->dispatch(new LeaseLost($message));
+
+        return DeliveryOutcome::LeaseLost;
     }
 
     /**
@@ -169,18 +194,39 @@ final class Relay
                 'last_error' => $error,
             ]);
 
+            $this->events->dispatch(new MessagePublishFailed($message, $error, $message->attempts, null));
+            $this->deadLettered($message->id, $message->type, $message->aggregateId, $error);
+
             return DeliveryOutcome::DeadLettered;
         }
 
+        $retryAt = self::now() + $this->backoff->delayMs($message->attempts);
+
         $this->owned($message)->update([
             'status' => MessageStatus::Pending->value,
-            'available_at' => self::now() + $this->backoff->delayMs($message->attempts),
+            'available_at' => $retryAt,
             'lease_owner' => null,
             'lease_until' => null,
             'last_error' => $error,
         ]);
 
+        $this->events->dispatch(new MessagePublishFailed($message, $error, $message->attempts, $retryAt));
+
         return DeliveryOutcome::Failed;
+    }
+
+    private function deadLettered(MessageId $id, string $type, ?string $aggregateId, string $reason): void
+    {
+        $this->events->dispatch(new MessageFailed($id, $type, $aggregateId, $reason));
+
+        if ($this->options->ordered && $aggregateId !== null) {
+            $this->events->dispatch(new AggregateBlocked($aggregateId, $id));
+        }
+    }
+
+    private function leaseExpiredReason(): string
+    {
+        return "Lease expired after {$this->options->maxAttempts} attempts: the worker stopped while delivering.";
     }
 
     /**

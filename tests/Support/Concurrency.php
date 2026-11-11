@@ -19,6 +19,21 @@ function startWorker(array $arguments): Process
     return $process;
 }
 
+/**
+ * Starts relay workers that all begin at the same moment, after every process has booted.
+ *
+ * @return list<Process>
+ */
+function startRelayWorkers(int $count, int $batchSize): array
+{
+    $startAt = (string) (microtime(true) + 2.0);
+
+    return array_map(
+        fn (int $n): Process => startWorker(['relay-until-empty', "w{$n}", (string) $batchSize, $startAt]),
+        range(1, $count),
+    );
+}
+
 function createDeliveriesTable(): void
 {
     Schema::dropIfExists('test_deliveries');

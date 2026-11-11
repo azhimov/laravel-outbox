@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Azhimov\Outbox\Inbox;
 
+use Azhimov\Outbox\Events\InboxDuplicateSkipped;
 use Closure;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Date;
 use InvalidArgumentException;
@@ -22,6 +24,8 @@ final readonly class Inbox
     public function __construct(
         private Connection $connection,
         private string $table,
+        /** @var Closure(): Dispatcher Resolved per event, so Event::fake() in application tests is honoured. */
+        private Closure $events,
     ) {}
 
     /**
@@ -33,7 +37,7 @@ final readonly class Inbox
             throw new InvalidArgumentException('Inbox consumer and message id must not be empty.');
         }
 
-        return $this->connection->transaction(function () use ($consumer, $messageId, $handler): InboxOutcome {
+        $outcome = $this->connection->transaction(function () use ($consumer, $messageId, $handler): InboxOutcome {
             $claimed = $this->connection->table($this->table)->insertOrIgnore([
                 'consumer' => $consumer,
                 'message_id' => $messageId,
@@ -48,5 +52,11 @@ final readonly class Inbox
 
             return InboxOutcome::Processed;
         });
+
+        if ($outcome === InboxOutcome::AlreadyProcessed) {
+            ($this->events)()->dispatch(new InboxDuplicateSkipped($consumer, $messageId));
+        }
+
+        return $outcome;
     }
 }

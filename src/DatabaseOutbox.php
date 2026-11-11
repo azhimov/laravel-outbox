@@ -6,11 +6,14 @@ namespace Azhimov\Outbox;
 
 use Azhimov\Outbox\Contracts\Outbox;
 use Azhimov\Outbox\Contracts\ShouldBeOutboxed;
+use Azhimov\Outbox\Events\MessageStored;
 use Azhimov\Outbox\Exceptions\NotInTransaction;
 use Azhimov\Outbox\Support\AggregateSequence;
 use Azhimov\Outbox\Support\MessageId;
 use Azhimov\Outbox\Support\MessageStatus;
 use Azhimov\Outbox\Support\NewMessage;
+use Closure;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Date;
 
@@ -21,6 +24,8 @@ final readonly class DatabaseOutbox implements Outbox
         private string $table,
         private string $aggregatesTable,
         private bool $strictTransaction,
+        /** @var Closure(): Dispatcher Resolved per event, so Event::fake() in application tests is honoured. */
+        private Closure $events,
     ) {}
 
     public function publish(
@@ -70,6 +75,9 @@ final readonly class DatabaseOutbox implements Outbox
             'available_at' => $now,
             'created_at' => $now,
         ]);
+
+        // ShouldDispatchAfterCommit: held until the business transaction commits, dropped on rollback.
+        ($this->events)()->dispatch(new MessageStored($id, $message->topic, $message->type, $message->aggregateId));
 
         return $id;
     }

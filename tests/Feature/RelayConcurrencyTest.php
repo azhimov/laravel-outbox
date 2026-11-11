@@ -17,7 +17,7 @@ it('never hands one message to two workers at once', function (): void {
         }
     });
 
-    $workers = array_map(fn (int $n) => startWorker(['relay-until-empty', "w{$n}", '10']), range(1, 4));
+    $workers = startRelayWorkers(count: 4, batchSize: 10);
     foreach ($workers as $worker) {
         $worker->wait();
         expect($worker->getExitCode())->toBe(0, $worker->getErrorOutput());

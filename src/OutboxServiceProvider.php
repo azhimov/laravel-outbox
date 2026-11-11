@@ -15,6 +15,7 @@ use Azhimov\Outbox\Relay\Relay;
 use Azhimov\Outbox\Relay\RelayOptions;
 use Azhimov\Outbox\Transports\TransportManager;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Connection;
 use Illuminate\Database\DatabaseManager;
@@ -35,6 +36,7 @@ final class OutboxServiceProvider extends ServiceProvider
                 table: self::string($config, 'outbox.table', 'outbox_messages'),
                 aggregatesTable: self::string($config, 'outbox.aggregates_table', 'outbox_aggregates'),
                 strictTransaction: $config->get('outbox.strict_transaction', true) !== false,
+                events: fn (): Dispatcher => $app->make(Dispatcher::class),
             );
         });
 
@@ -57,6 +59,7 @@ final class OutboxServiceProvider extends ServiceProvider
             return new Inbox(
                 connection: $app->make(DatabaseManager::class)->connection(is_string($name) && $name !== '' ? $name : null),
                 table: self::string($config, 'outbox.inbox_table', 'inbox_messages'),
+                events: fn (): Dispatcher => $app->make(Dispatcher::class),
             );
         });
 
@@ -75,6 +78,7 @@ final class OutboxServiceProvider extends ServiceProvider
                 table: self::string($config, 'outbox.table', 'outbox_messages'),
                 transport: $transport,
                 options: $options,
+                events: $app->make(Dispatcher::class),
             );
         });
     }

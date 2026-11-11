@@ -20,6 +20,8 @@ final class RelayCommand extends Command
 
     protected $description = 'Deliver outbox messages to the configured transport';
 
+    private bool $stopping = false;
+
     public function handle(Repository $config): int
     {
         $batch = $this->option('batch');
@@ -37,17 +39,39 @@ final class RelayCommand extends Command
         $sleepMs = is_numeric($sleep) ? (int) $sleep : (is_numeric($v = $config->get('outbox.relay.sleep_ms')) ? (int) $v : 1_000);
         $maxBatches = is_numeric($m = $this->option('max-batches')) ? (int) $m : 0;
 
-        for ($batches = 1; $maxBatches === 0 || $batches <= $maxBatches; $batches++) {
+        // SIGTERM / SIGINT: finish the batch in hand (its leases would otherwise have to
+        // expire before another worker could take it), then exit.
+        $this->trap([SIGTERM, SIGINT], function (): void {
+            $this->stopping = true;
+        });
+
+        $this->line('outbox: relaying (pid '.getmypid().')');
+
+        for ($batches = 1; ! $this->stopping && ($maxBatches === 0 || $batches <= $maxBatches); $batches++) {
             $result = $relay->runOnce();
 
             if ($result->claimed > 0) {
                 $this->report($result);
-            } elseif ($sleepMs > 0) {
-                usleep($sleepMs * 1_000);
+            } else {
+                $this->sleep($sleepMs);
             }
         }
 
+        if ($this->stopping) {
+            $this->line('outbox: stopping');
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Sleeps in short slices so a stop signal does not wait out the whole interval.
+     */
+    private function sleep(int $milliseconds): void
+    {
+        for ($slept = 0; $slept < $milliseconds && ! $this->stopping; $slept += 50) {
+            usleep(min(50, $milliseconds - $slept) * 1_000);
+        }
     }
 
     private function report(RelayResult $result): void
