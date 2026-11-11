@@ -63,7 +63,9 @@
             "@format:check",
             "@analyse",
             "@test"
-        ]
+        ],
+        "test:mysql": "OUTBOX_TEST_DB=mysql DB_PORT=33306 DB_PASSWORD=secret OUTBOX_TEST_RABBITMQ=1 RABBITMQ_PORT=56720 OUTBOX_TEST_REDIS=1 REDIS_CLIENT=predis REDIS_PORT=63790 pest",
+        "test:pgsql": "OUTBOX_TEST_DB=pgsql DB_PORT=55432 DB_PASSWORD=secret OUTBOX_TEST_RABBITMQ=1 RABBITMQ_PORT=56720 OUTBOX_TEST_REDIS=1 REDIS_CLIENT=predis REDIS_PORT=63790 pest"
     },
     "extra": {
         "laravel": {

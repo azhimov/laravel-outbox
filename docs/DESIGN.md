@@ -35,6 +35,15 @@
 - `payload` и `headers` — текстовые столбцы с JSON, не тип `json`: MySQL переставляет ключи, `jsonb` переформатирует, а потребителям, которые хэшируют или подписывают тело, нужны точные байты. Времена — unix-миллисекунды.
 - **`Outbox::fake()`** с `assertPublished()` / `assertNothingPublished()` для тестов приложения: с `RefreshDatabase` транзакция открыта всегда, strict-проверка там ничего не ловит — это в README.
 
+## Решения по ходу реализации
+- `attempts` растёт при захвате (claim), а не при ошибке: истёкший lease тоже считается попыткой. Сообщение, у которого lease истёк на последней попытке, уходит в `failed`, а не захватывается снова: воркер мог умереть именно на нём.
+- RabbitMQ: exchange = topic, routing key = type, `mandatory` + publisher confirms — немаршрутизируемое сообщение считается ошибкой.
+- Redis Streams: поток `stream_prefix + topic`, поля `ce_*`, `content-type`, свои headers, `data`. Имена headers `ce_*`, `data`, `content-type` зарезервированы для всех транспортов.
+- Синглтоны (`DatabaseOutbox`, `Inbox`) получают dispatcher при каждом событии, чтобы `Event::fake()` в тестах приложения работал после первого вызова.
+- MySQL при REPEATABLE READ на время транзакции захвата блокирует и просмотренные-отфильтрованные строки: соседний воркер может получить пустой batch. На корректность не влияет, описано в Limitations.
+- Inbox — отдельная миграция и тег `outbox-inbox-migrations`: сервису-потребителю не нужны таблицы outbox.
+- `docker compose` с демо-приложением (MySQL + RabbitMQ + relay) перенесён в roadmap 0.2; сейчас compose поднимает только серверы для интеграционных тестов.
+
 ## API
 ```php
 DB::transaction(function () use ($order) {

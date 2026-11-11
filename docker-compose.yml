@@ -1,0 +1,24 @@
+# Servers for the integration suites (composer test:mysql / test:pgsql).
+# Ports are shifted so they do not clash with databases already running locally.
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: outbox
+    ports: ['33306:3306']
+
+  pgsql:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: outbox
+    ports: ['55432:5432']
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    ports: ['56720:5672', '15672:15672']
+
+  redis:
+    image: redis:7
+    ports: ['63790:6379']
