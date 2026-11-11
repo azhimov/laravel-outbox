@@ -1,0 +1,67 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $schema = Schema::connection($this->connectionName());
+
+        $schema->create($this->table('table', 'outbox_messages'), function (Blueprint $table): void {
+            $table->uuid('id')->primary();
+            $table->string('topic');
+            $table->string('type');
+            $table->string('aggregate_id')->nullable();
+            // Position inside the aggregate, assigned in commit order (see outbox_aggregates).
+            $table->unsignedBigInteger('aggregate_seq')->nullable();
+            $table->json('payload');
+            $table->json('headers');
+            $table->string('status', 16);
+            $table->unsignedInteger('attempts')->default(0);
+            // Unix time in milliseconds: independent of DB and app time zones.
+            $table->unsignedBigInteger('available_at');
+            $table->string('lease_owner', 64)->nullable();
+            $table->unsignedBigInteger('lease_until')->nullable();
+            $table->text('last_error')->nullable();
+            $table->unsignedBigInteger('created_at');
+            $table->unsignedBigInteger('published_at')->nullable();
+
+            $table->unique(['aggregate_id', 'aggregate_seq']);
+            $table->index(['status', 'available_at']);
+        });
+
+        // One row per aggregate: the last sequence number handed out. Incrementing it
+        // locks the row until commit, so writers of one aggregate are serialized.
+        $schema->create($this->table('aggregates_table', 'outbox_aggregates'), function (Blueprint $table): void {
+            $table->string('aggregate_id')->primary();
+            $table->unsignedBigInteger('last_seq');
+        });
+    }
+
+    public function down(): void
+    {
+        $schema = Schema::connection($this->connectionName());
+
+        $schema->dropIfExists($this->table('table', 'outbox_messages'));
+        $schema->dropIfExists($this->table('aggregates_table', 'outbox_aggregates'));
+    }
+
+    private function connectionName(): ?string
+    {
+        $connection = config('outbox.connection');
+
+        return is_string($connection) ? $connection : null;
+    }
+
+    private function table(string $key, string $default): string
+    {
+        $table = config("outbox.{$key}");
+
+        return is_string($table) && $table !== '' ? $table : $default;
+    }
+};

@@ -19,6 +19,12 @@ final class OutboxServiceProvider extends ServiceProvider
             $this->publishes([
                 self::configPath() => config_path('outbox.php'),
             ], 'outbox-config');
+
+            $this->publishes([
+                __DIR__.'/../database/migrations/create_outbox_tables.php.stub' => database_path(
+                    'migrations/'.date('Y_m_d_His').'_create_outbox_tables.php',
+                ),
+            ], 'outbox-migrations');
         }
     }
 

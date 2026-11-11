@@ -19,6 +19,8 @@ return [
 
     'table' => 'outbox_messages',
 
+    'aggregates_table' => 'outbox_aggregates',
+
     'inbox_table' => 'inbox_messages',
 
     /*
