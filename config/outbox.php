@@ -25,6 +25,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Strict transaction
+    |--------------------------------------------------------------------------
+    |
+    | true: Outbox::publish() outside a transaction on the outbox connection
+    | throws NotInTransaction, because the message would no longer commit
+    | together with the business change. false: publish anyway.
+    |
+    */
+
+    'strict_transaction' => filter_var(env('OUTBOX_STRICT_TRANSACTION', true), FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? true,
+
+    /*
+    |--------------------------------------------------------------------------
     | Transport
     |--------------------------------------------------------------------------
     |

@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Azhimov\Outbox;
 
+use Azhimov\Outbox\Contracts\Outbox;
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Connection;
+use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\ServiceProvider;
 
 final class OutboxServiceProvider extends ServiceProvider
@@ -11,6 +16,17 @@ final class OutboxServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(self::configPath(), 'outbox');
+
+        $this->app->singleton(Outbox::class, function (Application $app): Outbox {
+            $config = $app->make(Repository::class);
+
+            return new DatabaseOutbox(
+                connection: self::connection($app->make(DatabaseManager::class), $config),
+                table: self::string($config, 'outbox.table', 'outbox_messages'),
+                aggregatesTable: self::string($config, 'outbox.aggregates_table', 'outbox_aggregates'),
+                strictTransaction: $config->get('outbox.strict_transaction', true) !== false,
+            );
+        });
     }
 
     public function boot(): void
@@ -26,6 +42,20 @@ final class OutboxServiceProvider extends ServiceProvider
                 ),
             ], 'outbox-migrations');
         }
+    }
+
+    private static function connection(DatabaseManager $db, Repository $config): Connection
+    {
+        $name = $config->get('outbox.connection');
+
+        return $db->connection(is_string($name) && $name !== '' ? $name : null);
+    }
+
+    private static function string(Repository $config, string $key, string $default): string
+    {
+        $value = $config->get($key);
+
+        return is_string($value) && $value !== '' ? $value : $default;
     }
 
     private static function configPath(): string

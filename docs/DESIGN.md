@@ -32,6 +32,7 @@
 - **D. Inbox:** `Inbox::handle(string $consumer, string $messageId, Closure $handler)`, consumer явно. Middleware для job берёт consumer из свойства job или `outbox.inbox.consumer`.
 - **E. Kafka** — roadmap v0.2.
 - `id` — `$table->uuid()` (PG: нативный uuid, MySQL: char(36)), UUIDv7 через `Str::uuid7()` (нужен `ramsey/uuid ^4.7` в require). Payload — только JSON-массив. Facade + контракт. Published хранятся до `outbox:prune`. `strict_transaction=true` по умолчанию.
+- `payload` и `headers` — текстовые столбцы с JSON, не тип `json`: MySQL переставляет ключи, `jsonb` переформатирует, а потребителям, которые хэшируют или подписывают тело, нужны точные байты. Времена — unix-миллисекунды.
 - **`Outbox::fake()`** с `assertPublished()` / `assertNothingPublished()` для тестов приложения: с `RefreshDatabase` транзакция открыта всегда, strict-проверка там ничего не ловит — это в README.
 
 ## API

@@ -19,8 +19,10 @@ return new class extends Migration
             $table->string('aggregate_id')->nullable();
             // Position inside the aggregate, assigned in commit order (see outbox_aggregates).
             $table->unsignedBigInteger('aggregate_seq')->nullable();
-            $table->json('payload');
-            $table->json('headers');
+            // Text, not a JSON column: MySQL reorders keys and PostgreSQL jsonb reformats,
+            // and consumers that hash or sign the body need the exact bytes.
+            $table->longText('payload');
+            $table->text('headers');
             $table->string('status', 16);
             $table->unsignedInteger('attempts')->default(0);
             // Unix time in milliseconds: independent of DB and app time zones.
