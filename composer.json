@@ -1,0 +1,71 @@
+{
+    "name": "azhimov/laravel-outbox",
+    "description": "Transactional outbox and inbox for Laravel: publish events in the same database transaction, relay them at-least-once with per-aggregate ordering, deduplicate on the consumer side.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "outbox",
+        "transactional-outbox",
+        "inbox",
+        "messaging",
+        "rabbitmq",
+        "redis-streams",
+        "event-driven"
+    ],
+    "authors": [
+        {
+            "name": "Zhanibek Azhimov",
+            "homepage": "https://github.com/azhimov"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/console": "^12.0 || ^13.0",
+        "illuminate/contracts": "^12.0 || ^13.0",
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "pestphp/pest": "^3.8 || ^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Azhimov\\Outbox\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Azhimov\\Outbox\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "format": "pint",
+        "format:check": "pint --test",
+        "check": [
+            "@format:check",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Azhimov\\Outbox\\OutboxServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
