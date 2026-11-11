@@ -24,6 +24,11 @@ use UnexpectedValueException;
  *
  * A worker that dies keeps nothing forever: once lease_until passes, another worker
  * claims the message again. That is why delivery is at-least-once.
+ *
+ * Ordering: a message of an aggregate is claimable only while every earlier message of
+ * that aggregate (lower aggregate_seq) is published. So each aggregate has at most one
+ * message in flight, a failed one blocks its aggregate until retried, and different
+ * aggregates are still spread over all workers.
  */
 final class Relay
 {
@@ -179,14 +184,29 @@ final class Relay
     }
 
     /**
-     * Pending and due, or leased by a worker whose lease has run out.
+     * Pending and due, or leased by a worker whose lease has run out;
+     * with ordering, also the head of its aggregate.
      */
     private function claimable(int $now): Builder
     {
-        return $this->table()->where(function (Builder $query) use ($now): void {
+        $query = $this->table()->where(function (Builder $query) use ($now): void {
             $query
                 ->where(fn (Builder $q) => $q->where('status', MessageStatus::Pending->value)->where('available_at', '<=', $now))
                 ->orWhere(fn (Builder $q) => $q->where('status', MessageStatus::Processing->value)->where('lease_until', '<', $now));
+        });
+
+        if (! $this->options->ordered) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $query): void {
+            $query->whereNull('aggregate_id')->orWhereNotExists(function (Builder $earlier): void {
+                $earlier->selectRaw('1')
+                    ->from("{$this->table} as earlier")
+                    ->whereColumn('earlier.aggregate_id', "{$this->table}.aggregate_id")
+                    ->whereColumn('earlier.aggregate_seq', '<', "{$this->table}.aggregate_seq")
+                    ->where('earlier.status', '!=', MessageStatus::Published->value);
+            });
         });
     }
 

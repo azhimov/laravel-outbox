@@ -74,6 +74,14 @@ return [
     |--------------------------------------------------------------------------
     */
 
+    /*
+    | aggregate: messages with the same aggregateId are delivered one at a time,
+    | in commit order; a failed one blocks its aggregate until outbox:retry.
+    | none: no ordering, every message is independent.
+    */
+
+    'ordering' => env('OUTBOX_ORDERING', 'aggregate'),
+
     'relay' => [
         'batch_size' => (int) env('OUTBOX_RELAY_BATCH_SIZE', 100),
         'sleep_ms' => (int) env('OUTBOX_RELAY_SLEEP_MS', 1000),

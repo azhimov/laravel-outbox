@@ -20,6 +20,8 @@ final readonly class RelayOptions
         public int $backoffMaxMs,
         /** 0..1: the share of each delay that is randomized. */
         public float $backoffJitter,
+        /** true: messages of one aggregate go out one at a time, in sequence order. */
+        public bool $ordered = true,
     ) {
         if ($batchSize < 1) {
             throw new InvalidArgumentException('Relay batch size must be at least 1.');
@@ -55,6 +57,7 @@ final readonly class RelayOptions
             backoffMultiplier: $float('backoff.multiplier', 2.0),
             backoffMaxMs: $int('backoff.max_ms', 300_000),
             backoffJitter: $float('backoff.jitter', 0.2),
+            ordered: $config->get('outbox.ordering', 'aggregate') !== 'none',
         );
     }
 }
