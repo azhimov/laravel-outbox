@@ -5,23 +5,25 @@
 ## Проблема
 Сервис сохраняет заказ в БД и публикует событие `order.paid` в брокер. Если упасть между этими шагами, будет либо заказ без события, либо событие без заказа (dual write). Transactional outbox решает это так: событие пишется в таблицу `outbox_messages` **в той же транзакции**, что и бизнес-изменение, а отдельный relay доставляет его в брокер с гарантией **at-least-once**. На стороне получателя inbox убирает дубли, и в итоге получается effectively-once.
 
-## Аналоги (предварительно, 11.11.2026 — перепроверить на Packagist перед стартом)
-| Пакет | Что известно |
-|---|---|
-| ludovicose/transaction-outbox | ~21k загрузок, pub-sub, последний релиз 2024 |
-| webrek/laravel-outbox | relay с retries и backoff |
-| dnakitare/laravel-outbox | события и jobs, row-level locks, dead-letter; beta |
-| gpalyan/laravel-outbox | outbox + inbox, broker-agnostic, PHP 8.4+ |
-| khandroider/laravel-eventbus | outbox + idempotent inbox поверх RabbitMQ |
-| sumantasam1990/phpoutbox | Laravel + Symfony + vanilla PHP |
-| bugfix666, mohamedhekal, urfysoft, egensolve | небольшие пакеты |
+## Аналоги (проверено по README и исходникам, 11.11.2026)
+| Пакет | Загрузки | Параллельный relay | Порядок по агрегату | Inbox в транзакции обработчика | Брокеры в CI |
+|---|---|---|---|---|---|
+| ecotone/laravel + ecotone/dbal | ~355k | `SKIP LOCKED` + reservation | только в event-sourced потоке и через ключи Kafka | да (message_id + consumer endpoint) | да: RabbitMQ, Kafka, SQS, Redis |
+| eventsauce/message-outbox-for-illuminate | ~36k | нет, один relay | глобальный FIFO одного relay, сбой блокирует всё | нет inbox | нет CI |
+| ianfoxdev/outbox + ianfoxdev/inbox | единицы | один активный relay (`pg_try_advisory_lock`), relay на Go | да, но с одним relay (ADR: параллельные воркеры ломают порядок) | да (consumer + key) | RabbitMQ и Kafka для Go-relay |
+| mykholy/laravel-flowguard | единицы | `SKIP LOCKED` + lease-токен (sha256) + fenced ack | нет | webhook-inbox, scope tenant + event id | только MySQL/PG |
+| rabbitevents/outbox | единицы | `SKIP LOCKED`, блокировка на время отправки | coalescing по ключу объекта | нет (дедуп через кэш) | MySQL, PG, RabbitMQ |
+| khandroider, dnakitare, webrek, sumantasam1990, gpalyan, ludovicose, kafka/workflow | ≤22k | от «нет» до `SKIP LOCKED` без reclaim | нет | нет | нет |
 
-Явного лидера нет, все маленькие. Сами по себе outbox, retries, backoff, inbox и dead-letter **не** являются отличиями. Отличаемся качеством гарантий и тем, насколько они проверены:
-1. **Упорядоченность по агрегату.** Сообщения одного `aggregate_id` уходят строго по порядку даже при нескольких воркерах relay, а разные агрегаты обрабатываются параллельно.
-2. **Безопасный параллельный relay.** `FOR UPDATE SKIP LOCKED` (MySQL 8 / PostgreSQL) и lease с owner-token. Упавший воркер не держит сообщения вечно, сообщение не публикуется дважды одновременно.
-3. **Inbox с той же строгостью, что laravel-idempotency.** Дедупликация по `message_id` в транзакции обработчика: отметка «обработано» и бизнес-изменение коммитятся вместе.
-4. **Транспорты проверены на настоящих брокерах в CI**: RabbitMQ и Redis Streams как service containers, Kafka опционально. Плюс транспорт «Laravel queue» для тех, у кого брокера нет.
-5. **Связка с laravel-idempotency и payments-outbox**: один и тот же сценарий платежа end-to-end.
+Лидер по загрузкам — Ecotone, но это большой CQRS-фреймворк, outbox в нём — часть messaging-слоя. Среди отдельных Laravel-пакетов явного лидера нет.
+
+**Не являются отличиями** (уже есть у других): outbox, retries/backoff/dead-letter, `SKIP LOCKED` (Ecotone, flowguard, rabbitevents и др.), lease с owner-token и fencing (flowguard), inbox в транзакции обработчика со scope consumer + message_id (ianfoxdev/inbox, Ecotone), RabbitMQ в CI (Ecotone, rabbitevents, ianfoxdev), связка outbox + idempotency как идея (webrek, flowguard).
+
+**Отличия, которые реально проверяемы:**
+1. **Строгий порядок внутри агрегата при нескольких параллельных воркерах relay.** У ianfoxdev порядок держится одним активным relay, у Ecotone — партициями Kafka. Здесь воркеры захватывают «голову» агрегата, разные агрегаты идут параллельно, failed-сообщение блокирует только свой агрегат. Доказывается тестами с конкурирующими воркерами на MySQL и PostgreSQL.
+2. **Всё в одном Laravel-нативном пакете:** outbox + параллельный relay с lease и fencing + inbox + транспорты RabbitMQ, Redis Streams и Laravel queue, без отдельного бинаря и без фреймворка.
+3. **Транспорты проверены на настоящих брокерах в CI**, включая Redis Streams (ни у одного из проверенных пакетов не нашёл тестов Redis Streams на живом сервере).
+4. **Конкретный end-to-end сценарий платежа** вместе с laravel-idempotency и payments-outbox, с тестами, а не только идея связки.
 
 ## API
 ```php
