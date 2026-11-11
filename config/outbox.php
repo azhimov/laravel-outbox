@@ -41,12 +41,32 @@ return [
     | Transport
     |--------------------------------------------------------------------------
     |
-    | Where the relay delivers messages. Transport settings are added
-    | together with each transport.
+    | Where the relay delivers messages: log, null, queue (more come with
+    | each transport). Messages go out as CloudEvents 1.0 in binary mode;
+    | source is their "source" attribute (default: app.name).
     |
     */
 
     'transport' => env('OUTBOX_TRANSPORT', 'log'),
+
+    'source' => env('OUTBOX_SOURCE'),
+
+    'transports' => [
+
+        'log' => [
+            'channel' => env('OUTBOX_LOG_CHANNEL'),
+        ],
+
+        'queue' => [
+            'connection' => env('OUTBOX_QUEUE_CONNECTION'),
+            'queue' => env('OUTBOX_QUEUE'),
+            // Consumer side: message type => handler class with handle(ReceivedMessage).
+            'handlers' => [
+                // 'order.paid' => \App\Outbox\HandleOrderPaid::class,
+            ],
+        ],
+
+    ],
 
     /*
     |--------------------------------------------------------------------------

@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Azhimov\Outbox;
 
 use Azhimov\Outbox\Contracts\Outbox;
+use Azhimov\Outbox\Contracts\Transport;
+use Azhimov\Outbox\Transports\TransportManager;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Connection;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\ServiceProvider;
+use LogicException;
 
 final class OutboxServiceProvider extends ServiceProvider
 {
@@ -26,6 +29,18 @@ final class OutboxServiceProvider extends ServiceProvider
                 aggregatesTable: self::string($config, 'outbox.aggregates_table', 'outbox_aggregates'),
                 strictTransaction: $config->get('outbox.strict_transaction', true) !== false,
             );
+        });
+
+        $this->app->singleton(TransportManager::class, fn (Application $app): TransportManager => new TransportManager($app));
+
+        $this->app->bind(Transport::class, function (Application $app): Transport {
+            $transport = $app->make(TransportManager::class)->driver();
+
+            if (! $transport instanceof Transport) {
+                throw new LogicException('Outbox transports must implement '.Transport::class.'.');
+            }
+
+            return $transport;
         });
     }
 

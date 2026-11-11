@@ -20,6 +20,8 @@ final readonly class OutboxMessage
         public MessageId $id,
         public string $topic,
         public string $type,
+        /** The payload JSON exactly as stored: transports send these bytes. */
+        public string $body,
         public array $payload,
         public array $headers,
         public ?string $aggregateId,
@@ -60,6 +62,7 @@ final readonly class OutboxMessage
             id: MessageId::fromString(self::string($row, 'id')),
             topic: self::string($row, 'topic'),
             type: self::string($row, 'type'),
+            body: self::string($row, 'payload'),
             payload: self::jsonArray($row, 'payload'),
             headers: self::headers($row),
             aggregateId: $aggregateId,

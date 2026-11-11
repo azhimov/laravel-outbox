@@ -31,6 +31,7 @@ it('rehydrates a database row', function (): void {
         ->and($message->aggregateId)->toBe('order-1001')
         ->and($message->aggregateSeq)->toBe(3)
         ->and($message->payload)->toBe(['order_id' => 1001, 'amount' => '25.00'])
+        ->and($message->body)->toBe('{"order_id":1001,"amount":"25.00"}')
         ->and($message->headers)->toBe(['tenant' => 'demo'])
         ->and($message->status)->toBe(MessageStatus::Processing)
         ->and($message->attempts)->toBe(2)

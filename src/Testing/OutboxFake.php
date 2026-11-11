@@ -45,6 +45,7 @@ final class OutboxFake implements Outbox
             id: $id,
             topic: $message->topic,
             type: $message->type,
+            body: $message->encodedPayload,
             payload: $message->payload,
             headers: $message->headers(),
             aggregateId: $aggregateId,
