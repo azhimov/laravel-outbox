@@ -75,10 +75,19 @@ return [
     */
 
     'relay' => [
-        'batch_size' => 100,
-        'sleep_ms' => 1000,
-        'lease_seconds' => 30,
-        'max_attempts' => 10,
+        'batch_size' => (int) env('OUTBOX_RELAY_BATCH_SIZE', 100),
+        'sleep_ms' => (int) env('OUTBOX_RELAY_SLEEP_MS', 1000),
+        // Must be longer than the slowest broker call, or a second worker takes over.
+        'lease_seconds' => (int) env('OUTBOX_RELAY_LEASE_SECONDS', 30),
+        // Claims before a message is moved to failed (dead letter).
+        'max_attempts' => (int) env('OUTBOX_RELAY_MAX_ATTEMPTS', 10),
+        // Delay before retry n: min(base * multiplier^(n-1), max), +/- jitter share.
+        'backoff' => [
+            'base_ms' => 1000,
+            'multiplier' => 2.0,
+            'max_ms' => 300000,
+            'jitter' => 0.2,
+        ],
     ],
 
 ];

@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Azhimov\Outbox;
 
+use Azhimov\Outbox\Console\RelayCommand;
 use Azhimov\Outbox\Contracts\Outbox;
 use Azhimov\Outbox\Contracts\Transport;
+use Azhimov\Outbox\Relay\Relay;
+use Azhimov\Outbox\Relay\RelayOptions;
 use Azhimov\Outbox\Transports\TransportManager;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
@@ -42,11 +45,31 @@ final class OutboxServiceProvider extends ServiceProvider
 
             return $transport;
         });
+
+        // Not a singleton: each worker needs its own lease token.
+        $this->app->bind(Relay::class, function (Application $app, array $parameters): Relay {
+            $config = $app->make(Repository::class);
+            $transport = $parameters['transport'] ?? $app->make(Transport::class);
+            $options = $parameters['options'] ?? RelayOptions::fromConfig($config);
+
+            if (! $transport instanceof Transport || ! $options instanceof RelayOptions) {
+                throw new LogicException('Relay needs a Transport and RelayOptions.');
+            }
+
+            return new Relay(
+                connection: self::connection($app->make(DatabaseManager::class), $config),
+                table: self::string($config, 'outbox.table', 'outbox_messages'),
+                transport: $transport,
+                options: $options,
+            );
+        });
     }
 
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
+            $this->commands([RelayCommand::class]);
+
             $this->publishes([
                 self::configPath() => config_path('outbox.php'),
             ], 'outbox-config');
