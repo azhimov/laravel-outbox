@@ -44,6 +44,12 @@ final readonly class NewMessage
             if (! is_string($name) || $name === '' || ! is_string($value)) {
                 throw new InvalidArgumentException('Outbox headers must be a map of non-empty names to strings.');
             }
+
+            // ce_* carries the CloudEvents attributes; data and content-type are Redis Streams fields.
+            $lower = strtolower($name);
+            if (str_starts_with($lower, 'ce_') || $lower === 'data' || $lower === 'content-type') {
+                throw new InvalidArgumentException("Outbox header name [{$name}] is reserved.");
+            }
         }
 
         try {

@@ -175,3 +175,7 @@ it('serializes writers of one aggregate in commit order', function (): void {
         ->and(storedMessage($id)->aggregateSeq)->toBe(2)
         ->and($waitedMs)->toBeGreaterThan(800.0);
 })->skip(fn (): bool => ! usesRealDatabase(), 'needs a real server: SQLite has no row locks');
+
+it('reserves header names used by the transports', function (string $name): void {
+    DB::transaction(fn () => Outbox::publish(topic: 'orders', type: 'order.paid', payload: [], headers: [$name => 'x']));
+})->throws(InvalidArgumentException::class, 'reserved')->with(['ce_id', 'CE_type', 'data', 'content-type']);

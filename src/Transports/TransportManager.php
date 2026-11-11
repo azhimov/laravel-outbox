@@ -6,6 +6,7 @@ namespace Azhimov\Outbox\Transports;
 
 use Azhimov\Outbox\Contracts\Transport;
 use Illuminate\Contracts\Queue\Factory as QueueFactory;
+use Illuminate\Contracts\Redis\Factory;
 use Illuminate\Log\LogManager;
 use Illuminate\Support\Manager;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
@@ -71,6 +72,19 @@ final class TransportManager extends Manager
         $config = $this->config->get('outbox.transports.rabbitmq');
 
         return RabbitMqTransport::fromConfig(is_array($config) ? $config : [], $this->source());
+    }
+
+    protected function createRedisDriver(): Transport
+    {
+        $maxLength = $this->config->get('outbox.transports.redis.max_length');
+
+        return new RedisStreamsTransport(
+            $this->container->make(Factory::class),
+            $this->setting('redis', 'connection'),
+            $this->setting('redis', 'stream_prefix') ?? 'outbox:',
+            is_numeric($maxLength) && (int) $maxLength > 0 ? (int) $maxLength : null,
+            $this->source(),
+        );
     }
 
     private function setting(string $transport, string $key): ?string

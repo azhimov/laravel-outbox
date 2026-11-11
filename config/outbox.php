@@ -74,6 +74,15 @@ return [
             'confirm_timeout' => 5.0,
         ],
 
+        // A Redis Stream per topic: stream_prefix + topic, fields ce_*, content-type,
+        // your headers, data. Uses a connection from database.redis (phpredis or predis).
+        'redis' => [
+            'connection' => env('OUTBOX_REDIS_CONNECTION'),
+            'stream_prefix' => env('OUTBOX_REDIS_STREAM_PREFIX', 'outbox:'),
+            // Approximate MAXLEN per stream; null keeps every entry.
+            'max_length' => env('OUTBOX_REDIS_MAX_LENGTH'),
+        ],
+
         'queue' => [
             'connection' => env('OUTBOX_QUEUE_CONNECTION'),
             'queue' => env('OUTBOX_QUEUE'),
