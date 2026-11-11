@@ -23,6 +23,13 @@ return [
 
     'inbox_table' => 'inbox_messages',
 
+    'inbox' => [
+        // null: the outbox connection. The handler's writes must use the same one.
+        'connection' => env('OUTBOX_INBOX_CONNECTION'),
+        // Default consumer name for DeduplicateWithInbox.
+        'consumer' => env('OUTBOX_INBOX_CONSUMER'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Strict transaction
@@ -86,6 +93,8 @@ return [
         'queue' => [
             'connection' => env('OUTBOX_QUEUE_CONNECTION'),
             'queue' => env('OUTBOX_QUEUE'),
+            // Run each delivery through the inbox (needs the inbox table and outbox.inbox.consumer).
+            'deduplicate' => filter_var(env('OUTBOX_QUEUE_DEDUPLICATE', false), FILTER_VALIDATE_BOOL),
             // Consumer side: message type => handler class with handle(ReceivedMessage).
             'handlers' => [
                 // 'order.paid' => \App\Outbox\HandleOrderPaid::class,

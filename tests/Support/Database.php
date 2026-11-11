@@ -50,3 +50,12 @@ function migrateOutboxTables(): void
     $migration->down();
     $migration->up();
 }
+
+function migrateInboxTable(): void
+{
+    /** @var Migration $migration */
+    $migration = require __DIR__.'/../../database/migrations/create_inbox_messages_table.php.stub';
+
+    $migration->down();
+    $migration->up();
+}

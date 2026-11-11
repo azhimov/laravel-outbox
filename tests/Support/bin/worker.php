@@ -10,10 +10,15 @@ declare(strict_types=1);
  *     keeps the transaction (and the aggregate's counter row) open for <hold-ms>,
  *     then commits and prints "committed".
  *
+ *   php worker.php inbox-and-hold <consumer> <message-id> <hold-ms>
+ *     Handles the message through the inbox, prints "handled", holds the transaction
+ *     for <hold-ms>, commits and prints "committed".
+ *
  *   php worker.php relay-until-empty <worker-name> <batch-size>
  *     Runs a relay with DatabaseRecordingTransport until two batches in a row are empty.
  */
 
+use Azhimov\Outbox\Facades\Inbox;
 use Azhimov\Outbox\Facades\Outbox;
 use Azhimov\Outbox\OutboxServiceProvider;
 use Azhimov\Outbox\Relay\Relay;
@@ -32,7 +37,18 @@ $database = outboxTestDatabase() ?? throw new RuntimeException('worker.php needs
 $app['config']->set('database.default', $driver);
 $app['config']->set("database.connections.{$driver}", $connection);
 
-[, $command, $arg1, $arg2] = $argv + [null, null, null, '0'];
+[, $command, $arg1, $arg2, $arg3] = $argv + [null, null, null, '0', '0'];
+
+if ($command === 'inbox-and-hold' && is_string($arg1)) {
+    Inbox::handle($arg1, (string) $arg2, function () use ($arg3): void {
+        DB::table('test_balances')->where('account', 'acc-1')->increment('amount', 100);
+        echo "handled\n";
+        usleep((int) $arg3 * 1000);
+    });
+
+    echo "committed\n";
+    exit(0);
+}
 
 if ($command === 'relay-until-empty' && is_string($arg1)) {
     $relay = $app->make(Relay::class, [

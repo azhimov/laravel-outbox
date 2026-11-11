@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Azhimov\Outbox;
 
+use Azhimov\Outbox\Console\InboxPruneCommand;
 use Azhimov\Outbox\Console\PruneCommand;
 use Azhimov\Outbox\Console\RelayCommand;
 use Azhimov\Outbox\Console\RetryCommand;
 use Azhimov\Outbox\Contracts\Outbox;
 use Azhimov\Outbox\Contracts\Transport;
+use Azhimov\Outbox\Inbox\Inbox;
 use Azhimov\Outbox\Relay\Relay;
 use Azhimov\Outbox\Relay\RelayOptions;
 use Azhimov\Outbox\Transports\TransportManager;
@@ -48,6 +50,16 @@ final class OutboxServiceProvider extends ServiceProvider
             return $transport;
         });
 
+        $this->app->singleton(Inbox::class, function (Application $app): Inbox {
+            $config = $app->make(Repository::class);
+            $name = $config->get('outbox.inbox.connection') ?? $config->get('outbox.connection');
+
+            return new Inbox(
+                connection: $app->make(DatabaseManager::class)->connection(is_string($name) && $name !== '' ? $name : null),
+                table: self::string($config, 'outbox.inbox_table', 'inbox_messages'),
+            );
+        });
+
         // Not a singleton: each worker needs its own lease token.
         $this->app->bind(Relay::class, function (Application $app, array $parameters): Relay {
             $config = $app->make(Repository::class);
@@ -70,7 +82,7 @@ final class OutboxServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([RelayCommand::class, RetryCommand::class, PruneCommand::class]);
+            $this->commands([RelayCommand::class, RetryCommand::class, PruneCommand::class, InboxPruneCommand::class]);
 
             $this->publishes([
                 self::configPath() => config_path('outbox.php'),
@@ -81,6 +93,12 @@ final class OutboxServiceProvider extends ServiceProvider
                     'migrations/'.date('Y_m_d_His').'_create_outbox_tables.php',
                 ),
             ], 'outbox-migrations');
+
+            $this->publishes([
+                __DIR__.'/../database/migrations/create_inbox_messages_table.php.stub' => database_path(
+                    'migrations/'.date('Y_m_d_His', time() + 1).'_create_inbox_messages_table.php',
+                ),
+            ], 'outbox-inbox-migrations');
         }
     }
 

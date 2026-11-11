@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Azhimov\Outbox\Jobs;
 
 use Azhimov\Outbox\Events\UnhandledOutboxMessage;
+use Azhimov\Outbox\Inbox\DeduplicateWithInbox;
 use Azhimov\Outbox\Support\CloudEvent;
 use Azhimov\Outbox\Support\ReceivedMessage;
 use Illuminate\Bus\Queueable;
@@ -23,7 +24,20 @@ final class DeliverOutboxMessage implements ShouldQueue
 {
     use Queueable;
 
+    /** Used by DeduplicateWithInbox when set; otherwise outbox.inbox.consumer. */
+    public ?string $inboxConsumer = null;
+
     public function __construct(public readonly CloudEvent $event) {}
+
+    /**
+     * With outbox.transports.queue.deduplicate, redelivered messages are skipped through the inbox.
+     *
+     * @return list<object>
+     */
+    public function middleware(): array
+    {
+        return config('outbox.transports.queue.deduplicate') === true ? [new DeduplicateWithInbox] : [];
+    }
 
     public function handle(Container $container, Repository $config, Dispatcher $events, LoggerInterface $logger): void
     {
