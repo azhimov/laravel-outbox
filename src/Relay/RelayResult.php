@@ -11,6 +11,7 @@ final readonly class RelayResult
         public int $published = 0,
         public int $failed = 0,
         public int $leaseLost = 0,
+        public int $deadLettered = 0,
     ) {}
 
     public function with(DeliveryOutcome $outcome): self
@@ -20,6 +21,7 @@ final readonly class RelayResult
             published: $this->published + ($outcome === DeliveryOutcome::Published ? 1 : 0),
             failed: $this->failed + ($outcome === DeliveryOutcome::Failed ? 1 : 0),
             leaseLost: $this->leaseLost + ($outcome === DeliveryOutcome::LeaseLost ? 1 : 0),
+            deadLettered: $this->deadLettered + ($outcome === DeliveryOutcome::DeadLettered ? 1 : 0),
         );
     }
 }

@@ -53,10 +53,11 @@ final class RelayCommand extends Command
     private function report(RelayResult $result): void
     {
         $this->line(sprintf(
-            'outbox: claimed %d, published %d, failed %d, lease lost %d',
+            'outbox: claimed %d, published %d, failed %d, dead-lettered %d, lease lost %d',
             $result->claimed,
             $result->published,
             $result->failed,
+            $result->deadLettered,
             $result->leaseLost,
         ));
     }

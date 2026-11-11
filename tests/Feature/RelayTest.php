@@ -170,3 +170,58 @@ it('validates relay options', function (array $options): void {
     'short lease' => [['leaseMs' => 500]],
     'no attempts' => [['maxAttempts' => 0]],
 ]);
+
+it('retries a failed message after an exponential backoff', function (): void {
+    $id = publishMessage('order.paid');
+    $this->transport->failTypes = ['order.paid'];
+    $relay = makeRelay($this->transport, ['backoffBaseMs' => 1_000, 'backoffMultiplier' => 2.0]);
+
+    $relay->runOnce();
+    expect((int) outboxRow($id->value)->available_at)->toBe(now()->getTimestampMs() + 1_000);
+
+    $this->travel(1)->seconds();
+    $relay->runOnce();
+    expect((int) outboxRow($id->value)->available_at)->toBe(now()->getTimestampMs() + 2_000)
+        ->and($relay->runOnce()->claimed)->toBe(0);
+
+    $this->transport->failTypes = [];
+    $this->travel(2)->seconds();
+
+    expect($relay->runOnce()->published)->toBe(1)
+        ->and((int) outboxRow($id->value)->attempts)->toBe(3);
+});
+
+it('moves a message to failed after max attempts', function (): void {
+    $id = publishMessage('order.paid');
+    $this->transport->failTypes = ['order.paid'];
+    $relay = makeRelay($this->transport, ['maxAttempts' => 3, 'backoffBaseMs' => 0, 'backoffMaxMs' => 0]);
+
+    $results = [$relay->runOnce(), $relay->runOnce(), $relay->runOnce()];
+
+    $row = outboxRow($id->value);
+    expect($row->status)->toBe('failed')
+        ->and((int) $row->attempts)->toBe(3)
+        ->and($row->last_error)->toContain('broker rejected')
+        ->and($results[2]->deadLettered)->toBe(1)
+        ->and($relay->runOnce()->claimed)->toBe(0);
+});
+
+it('dead-letters a message that keeps killing workers instead of claiming it forever', function (): void {
+    $id = publishMessage();
+    $options = ['maxAttempts' => 2];
+
+    // Two workers claim it and die before finishing.
+    makeRelay(new RecordingTransport, $options)->claim();
+    $this->travel(31)->seconds();
+    makeRelay(new RecordingTransport, $options)->claim();
+    $this->travel(31)->seconds();
+
+    $result = makeRelay($this->transport, $options)->runOnce();
+
+    $row = outboxRow($id->value);
+    expect($result->claimed)->toBe(0)
+        ->and($result->deadLettered)->toBe(1)
+        ->and($this->transport->published)->toBe([])
+        ->and($row->status)->toBe('failed')
+        ->and($row->last_error)->toContain('Lease expired after 2 attempts');
+});

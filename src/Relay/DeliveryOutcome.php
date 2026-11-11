@@ -8,8 +8,11 @@ enum DeliveryOutcome
 {
     case Published;
 
-    /** The transport threw; the message goes back for a retry (or to failed). */
+    /** The transport threw; the message comes back after a backoff. */
     case Failed;
+
+    /** The transport threw on the last allowed attempt: the message is now failed. */
+    case DeadLettered;
 
     /**
      * The broker call returned, but another worker had taken the message over:

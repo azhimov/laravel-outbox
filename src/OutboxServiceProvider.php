@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Azhimov\Outbox;
 
+use Azhimov\Outbox\Console\PruneCommand;
 use Azhimov\Outbox\Console\RelayCommand;
+use Azhimov\Outbox\Console\RetryCommand;
 use Azhimov\Outbox\Contracts\Outbox;
 use Azhimov\Outbox\Contracts\Transport;
 use Azhimov\Outbox\Relay\Relay;
@@ -68,7 +70,7 @@ final class OutboxServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
-            $this->commands([RelayCommand::class]);
+            $this->commands([RelayCommand::class, RetryCommand::class, PruneCommand::class]);
 
             $this->publishes([
                 self::configPath() => config_path('outbox.php'),
