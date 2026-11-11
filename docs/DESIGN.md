@@ -25,6 +25,15 @@
 3. **Транспорты проверены на настоящих брокерах в CI**, включая Redis Streams (ни у одного из проверенных пакетов не нашёл тестов Redis Streams на живом сервере).
 4. **Конкретный end-to-end сценарий платежа** вместе с laravel-idempotency и payments-outbox, с тестами, а не только идея связки.
 
+## Решения перед реализацией (11.11.2026)
+- **A. Порядок коммита ≠ порядок id.** Таблица `outbox_aggregates(aggregate_id PK, last_seq)`; `publish()` с `aggregateId` атомарно инкрементирует счётчик в той же транзакции (PG: `INSERT … ON CONFLICT … DO UPDATE … RETURNING`, MySQL: `ON DUPLICATE KEY UPDATE last_seq = LAST_INSERT_ID(last_seq + 1)`), сообщение получает `aggregate_seq`. Писатели одного агрегата сериализуются на строке счётчика, поэтому seq совпадает с порядком коммитов. Relay упорядочивает агрегат по `aggregate_seq`, не по `id`. Уникальный индекс `(aggregate_id, aggregate_seq)`. Без `aggregateId` — без счётчика и без порядка. Несколько агрегатов в одной транзакции дают риск deadlock при разном порядке; в Limitations: публикуйте агрегаты в стабильном порядке.
+- **B. Формат — CloudEvents 1.0, binary mode.** Тело = payload JSON. Атрибуты: `specversion=1.0`, `id`, `type`, `source` (конфиг, по умолчанию `app.name`), `subject` = aggregate_id, `time`, `datacontenttype=application/json` + свои headers. RabbitMQ — properties/headers `ce_*`, Redis Streams — поля `ce_*`.
+- **C. Транспорт `queue`** — job `DeliverOutboxMessage`, карта `type => handler` в конфиге. Неизвестный type — событие `UnhandledOutboxMessage` и лог, не исключение.
+- **D. Inbox:** `Inbox::handle(string $consumer, string $messageId, Closure $handler)`, consumer явно. Middleware для job берёт consumer из свойства job или `outbox.inbox.consumer`.
+- **E. Kafka** — roadmap v0.2.
+- `id` — `$table->uuid()` (PG: нативный uuid, MySQL: char(36)), UUIDv7 через `Str::uuid7()` (нужен `ramsey/uuid ^4.7` в require). Payload — только JSON-массив. Facade + контракт. Published хранятся до `outbox:prune`. `strict_transaction=true` по умолчанию.
+- **`Outbox::fake()`** с `assertPublished()` / `assertNothingPublished()` для тестов приложения: с `RefreshDatabase` транзакция открыта всегда, strict-проверка там ничего не ловит — это в README.
+
 ## API
 ```php
 DB::transaction(function () use ($order) {
@@ -68,7 +77,7 @@ DB::transaction(function () use ($order) {
 
 ## Inbox
 ```php
-Inbox::handle($messageId, function () { /* бизнес-изменение */ });
+Inbox::handle('billing', $messageId, function () { /* бизнес-изменение */ });
 ```
 - В одной транзакции: `insertOrIgnore` в `inbox_messages (message_id PK, consumer, processed_at)`, потом обработчик. Если строка уже есть, обработчик не вызывается, возвращается `AlreadyProcessed`.
 - Scope дедупликации: `consumer` + `message_id`, чтобы разные потребители одного сообщения не мешали друг другу.
@@ -107,7 +116,7 @@ Inbox::handle($messageId, function () { /* бизнес-изменение */ })
 10. Транспорт Redis Streams + интеграционные тесты.
 11. Inbox.
 12. События.
-13. Kafka (опционально; если не успеваем — в roadmap v0.2).
+13. Kafka — перенесено в roadmap v0.2 (решение E).
 14. README (Mermaid: dual-write проблема, поток outbox → relay → broker → inbox, конкурирующие воркеры), CHANGELOG, честное сравнение, Limitations.
 
 ## Definition of Done v0.1.0
