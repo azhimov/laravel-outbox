@@ -8,11 +8,13 @@ use Azhimov\Outbox\Contracts\Transport;
 use Azhimov\Outbox\Exceptions\TransportFailed;
 use Azhimov\Outbox\Support\CloudEvent;
 use Azhimov\Outbox\Support\OutboxMessage;
+use Azhimov\Outbox\Support\ReceivedMessage;
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
 use LogicException;
 use Predis\ClientInterface as PredisClient;
 use Redis as PhpRedis;
 use Throwable;
+use UnexpectedValueException;
 
 /**
  * Appends to a Redis Stream per topic (prefix + topic) with XADD. Fields, in order:
@@ -50,6 +52,35 @@ final readonly class RedisStreamsTransport implements Transport
         if (! is_string($id) || $id === '') {
             throw TransportFailed::because('Redis', "XADD to [{$stream}] returned no entry id");
         }
+    }
+
+    /**
+     * The consumer side: turns a stream entry (from XREAD / XREADGROUP / XRANGE) back
+     * into a ReceivedMessage, ready for Inbox::handle(). topic = stream name without
+     * this transport's prefix.
+     *
+     * @param  array<array-key, mixed>  $fields
+     *
+     * @throws UnexpectedValueException when the entry is not a message of this transport
+     */
+    public function receive(string $stream, array $fields): ReceivedMessage
+    {
+        $data = $fields['data'] ?? null;
+
+        if (! is_string($data)) {
+            throw new UnexpectedValueException("Stream entry of [{$stream}] has no data field.");
+        }
+
+        $attributes = [];
+        foreach ($fields as $name => $value) {
+            if (is_string($name) && is_string($value) && $name !== 'data' && $name !== 'content-type') {
+                $attributes[$name] = $value;
+            }
+        }
+
+        $topic = $this->prefix !== '' && str_starts_with($stream, $this->prefix) ? substr($stream, strlen($this->prefix)) : $stream;
+
+        return ReceivedMessage::fromCloudEvent(CloudEvent::fromPrefixed($topic, $attributes, $data));
     }
 
     /**

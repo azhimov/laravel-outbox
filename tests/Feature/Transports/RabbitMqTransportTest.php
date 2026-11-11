@@ -124,6 +124,41 @@ describe('RabbitMQ', function (): void {
         expect(receivedFromRabbit())->toHaveCount(1);
     });
 
+    it('reads a delivered message back with receive()', function (): void {
+        $sent = outboxMessage(['headers' => ['tenant' => 'demo', 'trace' => 'abc']]);
+        $this->rabbit->publish($sent);
+
+        [$amqp] = receivedFromRabbit();
+        $received = RabbitMqTransport::receive($amqp);
+
+        expect($received->id)->toBe($sent->id->value)
+            ->and($received->type)->toBe('order.paid')
+            ->and($received->subject)->toBe('order-1001')
+            ->and($received->source)->toBe('shop')
+            ->and($received->time)->toBe('2026-11-12T10:00:00.123Z')
+            ->and($received->topic)->toBe('orders')
+            ->and($received->headers)->toBe(['tenant' => 'demo', 'trace' => 'abc'])
+            ->and($received->body)->toBe($sent->body)
+            ->and($received->payload)->toBe($sent->payload);
+    });
+
+    it('receives a message without an aggregate', function (): void {
+        $this->rabbit->publish(outboxMessage(['aggregateId' => null, 'headers' => []]));
+
+        [$amqp] = receivedFromRabbit();
+
+        expect(RabbitMqTransport::receive($amqp)->subject)->toBeNull()
+            ->and(RabbitMqTransport::receive($amqp)->headers)->toBe([]);
+    });
+
+    it('refuses a message that is not a CloudEvent', function (): void {
+        $this->channel->basic_publish(new AMQPMessage('{"x":1}'), 'orders', 'order.paid');
+
+        [$amqp] = receivedFromRabbit();
+
+        RabbitMqTransport::receive($amqp);
+    })->throws(UnexpectedValueException::class);
+
     it('is resolved by the transport manager', function (): void {
         config(['outbox.transport' => 'rabbitmq']);
 

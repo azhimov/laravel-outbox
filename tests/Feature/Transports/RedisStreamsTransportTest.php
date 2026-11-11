@@ -69,6 +69,37 @@ describe('Redis Streams', function (): void {
         expect(count(streamEntries('outbox:orders')))->toBeLessThan(300);
     });
 
+    it('reads a stream entry back with receive()', function (): void {
+        $sent = outboxMessage(['headers' => ['tenant' => 'demo', 'trace' => 'abc']]);
+        $this->redis->publish($sent);
+
+        [$fields] = streamEntries('outbox:orders');
+        $received = $this->redis->receive('outbox:orders', $fields);
+
+        expect($received->id)->toBe($sent->id->value)
+            ->and($received->type)->toBe('order.paid')
+            ->and($received->subject)->toBe('order-1001')
+            ->and($received->source)->toBe('shop')
+            ->and($received->topic)->toBe('orders')
+            ->and($received->headers)->toBe(['tenant' => 'demo', 'trace' => 'abc'])
+            ->and($received->body)->toBe($sent->body)
+            ->and($received->payload)->toBe($sent->payload);
+    });
+
+    it('refuses an entry that is not a CloudEvent', function (array $fields): void {
+        $this->redis->receive('outbox:orders', $fields);
+    })->throws(UnexpectedValueException::class)->with([
+        'no data' => [['ce_id' => 'x', 'ce_type' => 't', 'ce_source' => 's', 'ce_time' => 't']],
+        'no attributes' => [['data' => '{}']],
+    ]);
+
+    it('takes the topic from a stream outside its prefix as is', function (): void {
+        $this->redis->publish(outboxMessage());
+        [$fields] = streamEntries('outbox:orders');
+
+        expect($this->redis->receive('elsewhere', $fields)->topic)->toBe('elsewhere');
+    });
+
     it('is resolved by the transport manager', function (): void {
         config(['outbox.transport' => 'redis']);
 

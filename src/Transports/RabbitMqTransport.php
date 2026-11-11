@@ -8,6 +8,7 @@ use Azhimov\Outbox\Contracts\Transport;
 use Azhimov\Outbox\Exceptions\TransportFailed;
 use Azhimov\Outbox\Support\CloudEvent;
 use Azhimov\Outbox\Support\OutboxMessage;
+use Azhimov\Outbox\Support\ReceivedMessage;
 use Closure;
 use PhpAmqpLib\Channel\AMQPChannel;
 use PhpAmqpLib\Connection\AbstractConnection;
@@ -103,6 +104,29 @@ final class RabbitMqTransport implements Transport
         if ($nacked) {
             throw TransportFailed::because('RabbitMQ', 'the broker rejected the message (nack)');
         }
+    }
+
+    /**
+     * The consumer side: turns a message this transport published (consumed with
+     * basic_consume / basic_get) back into a ReceivedMessage, ready for Inbox::handle().
+     * topic = the exchange it was published to.
+     *
+     * @throws \UnexpectedValueException when the message carries no CloudEvents attributes
+     */
+    public static function receive(AMQPMessage $message): ReceivedMessage
+    {
+        $fields = [];
+        $table = $message->has('application_headers') ? $message->get('application_headers') : null;
+
+        foreach ($table instanceof AMQPTable ? $table->getNativeData() : [] as $name => $value) {
+            if (is_string($name) && is_scalar($value)) {
+                $fields[$name] = (string) $value;
+            }
+        }
+
+        return ReceivedMessage::fromCloudEvent(
+            CloudEvent::fromPrefixed($message->getExchange() ?? '', $fields, $message->getBody()),
+        );
     }
 
     public function __destruct()
