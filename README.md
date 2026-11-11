@@ -48,6 +48,57 @@ Pick a transport (see [Transports](#transports)): RabbitMQ needs `composer requi
 
 ## Quick start
 
+In a Laravel app with the package installed and migrated, start RabbitMQ and give the `orders` exchange a queue:
+
+```bash
+composer require php-amqplib/php-amqplib
+docker run -d --name rabbit -p 5672:5672 -p 15672:15672 rabbitmq:4-management
+
+# once it is up: a durable topic exchange "orders" and a queue that gets everything from it
+H='content-type: application/json'
+curl -u guest:guest -X PUT  -H "$H" localhost:15672/api/exchanges/%2F/orders -d '{"type":"topic","durable":true}'
+curl -u guest:guest -X PUT  -H "$H" localhost:15672/api/queues/%2F/orders.all -d '{"durable":true}'
+curl -u guest:guest -X POST -H "$H" localhost:15672/api/bindings/%2F/e/orders/q/orders.all -d '{"routing_key":"#"}'
+```
+
+Set `OUTBOX_TRANSPORT=rabbitmq` in `.env`, publish in a transaction and run one relay batch:
+
+```bash
+php artisan tinker --execute="DB::transaction(fn () => Azhimov\Outbox\Facades\Outbox::publish(topic: 'orders', type: 'order.paid', payload: ['order_id' => 1001, 'amount' => '25.00'], aggregateId: 'order-1001'));"
+php artisan outbox:relay --once
+```
+```text
+outbox: claimed 1, published 1, failed 0, dead-lettered 0, lease lost 0
+```
+
+The message is in the queue: open http://localhost:15672 → Queues → `orders.all` → Get messages, or:
+
+```bash
+curl -u guest:guest -X POST -H "$H" localhost:15672/api/queues/%2F/orders.all/get -d '{"count":1,"ackmode":"ack_requeue_true","encoding":"auto"}'
+```
+```json
+{
+  "routing_key": "order.paid",
+  "payload": "{\"order_id\":1001,\"amount\":\"25.00\"}",
+  "properties": {
+    "message_id": "01a1cad7-bdd3-70b3-8c75-789d0e758274",
+    "type": "order.paid",
+    "headers": {
+      "ce_id": "01a1cad7-bdd3-70b3-8c75-789d0e758274",
+      "ce_source": "shop",
+      "ce_specversion": "1.0",
+      "ce_subject": "order-1001",
+      "ce_time": "2026-11-11T13:41:38.901Z",
+      "ce_type": "order.paid"
+    }
+  }
+}
+```
+
+(Output trimmed to the interesting fields.) A full end-to-end demo with a payment API, the relay and a consumer with the inbox is coming soon in **payments-outbox**.
+
+## Usage
+
 Publish inside the transaction of the change:
 
 ```php
@@ -298,7 +349,7 @@ If you already use Ecotone, use its outbox. If one relay is enough, `ianfoxdev/o
 ## Roadmap
 
 - 0.2: Kafka transport (ext-rdkafka, key = aggregate id).
-- 0.2: a `docker compose` demo: MySQL + RabbitMQ + relay + a consumer with the inbox.
+- 0.2: a `docker compose` demo: MySQL + RabbitMQ + relay + a consumer with the inbox (with payments-outbox).
 - Prometheus metrics for the relay: lag, attempts, dead letters.
 
 ## Testing

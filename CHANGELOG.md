@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-11
+
 ### Added
 - `Outbox::publish()` / `publishEvent()` (`ShouldBeOutboxed`): messages stored in the business transaction; `NotInTransaction` outside one in strict mode.
 - Per-aggregate sequence numbers from an `outbox_aggregates` counter, assigned in commit order (PostgreSQL / SQLite upsert with `RETURNING`, MySQL `LAST_INSERT_ID(expr)`).
@@ -20,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Known limitations
 - At-least-once delivery; consumers must be idempotent (use the inbox).
 - Publishing several aggregates in one transaction in different orders can deadlock.
-- Kafka is planned for 0.2.
 
-[Unreleased]: https://github.com/azhimov/laravel-outbox/commits/main
+### Planned for 0.2.0
+- Kafka transport (ext-rdkafka, key = aggregate id).
+- `docker compose` demo: MySQL + RabbitMQ + relay + a consumer with the inbox.
+
+[Unreleased]: https://github.com/azhimov/laravel-outbox/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/azhimov/laravel-outbox/releases/tag/v0.1.0
