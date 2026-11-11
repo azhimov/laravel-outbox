@@ -35,7 +35,14 @@
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.18",
         "orchestra/testbench": "^10.0 || ^11.0",
-        "pestphp/pest": "^3.8 || ^4.0"
+        "pestphp/pest": "^3.8 || ^4.0",
+        "php-amqplib/php-amqplib": "^3.7",
+        "predis/predis": "^2.2"
+    },
+    "suggest": {
+        "php-amqplib/php-amqplib": "Required for the rabbitmq transport (^3.7).",
+        "predis/predis": "Redis Streams transport without the phpredis extension (^2.2).",
+        "ext-redis": "Redis Streams transport with phpredis."
     },
     "autoload": {
         "psr-4": {

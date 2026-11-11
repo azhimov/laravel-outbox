@@ -57,6 +57,23 @@ return [
             'channel' => env('OUTBOX_LOG_CHANNEL'),
         ],
 
+        // composer require php-amqplib/php-amqplib. Exchange = message topic,
+        // routing key = message type. Waits for publisher confirms; a message
+        // no queue is bound for counts as failed.
+        'rabbitmq' => [
+            'host' => env('OUTBOX_RABBITMQ_HOST', '127.0.0.1'),
+            'port' => env('OUTBOX_RABBITMQ_PORT', 5672),
+            'user' => env('OUTBOX_RABBITMQ_USER', 'guest'),
+            'password' => env('OUTBOX_RABBITMQ_PASSWORD', 'guest'),
+            'vhost' => env('OUTBOX_RABBITMQ_VHOST', '/'),
+            'declare_exchanges' => true,
+            'exchange_type' => 'topic',
+            // Seconds. Keep all three well below outbox.relay.lease_seconds.
+            'connection_timeout' => 3.0,
+            'read_write_timeout' => 3.0,
+            'confirm_timeout' => 5.0,
+        ],
+
         'queue' => [
             'connection' => env('OUTBOX_QUEUE_CONNECTION'),
             'queue' => env('OUTBOX_QUEUE'),

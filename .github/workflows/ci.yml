@@ -127,16 +127,54 @@ jobs:
           DB_USERNAME: ${{ matrix.username }}
           DB_PASSWORD: secret
 
-  coverage:
-    name: Coverage (min 90%)
+  brokers:
+    name: Transports on real brokers
     runs-on: ubuntu-latest
+    services:
+      rabbitmq:
+        image: rabbitmq:4
+        ports: ['5672:5672']
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+
     steps:
       - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: mbstring, pdo_sqlite
+          extensions: mbstring, pdo_sqlite, sockets
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Run transport tests
+        run: vendor/bin/pest --ci tests/Feature/Transports
+        env:
+          OUTBOX_TEST_RABBITMQ: '1'
+          RABBITMQ_HOST: 127.0.0.1
+          RABBITMQ_PORT: 5672
+
+  coverage:
+    name: Coverage (min 90%)
+    runs-on: ubuntu-latest
+    # Brokers too, so transport code counts towards coverage.
+    services:
+      rabbitmq:
+        image: rabbitmq:4
+        ports: ['5672:5672']
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sockets
           coverage: pcov
 
       - name: Install dependencies
@@ -144,6 +182,10 @@ jobs:
 
       - name: Run tests with coverage
         run: vendor/bin/pest --ci --coverage --min=90
+        env:
+          OUTBOX_TEST_RABBITMQ: '1'
+          RABBITMQ_HOST: 127.0.0.1
+          RABBITMQ_PORT: 5672
 
   quality:
     name: Static analysis & code style

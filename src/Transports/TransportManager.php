@@ -8,6 +8,7 @@ use Azhimov\Outbox\Contracts\Transport;
 use Illuminate\Contracts\Queue\Factory as QueueFactory;
 use Illuminate\Log\LogManager;
 use Illuminate\Support\Manager;
+use PhpAmqpLib\Connection\AMQPStreamConnection;
 
 /**
  * Resolves transports by name (outbox.transport). Custom ones: extend('name', fn ($app) => ...).
@@ -59,6 +60,17 @@ final class TransportManager extends Manager
             $this->setting('queue', 'queue'),
             $this->source(),
         );
+    }
+
+    protected function createRabbitmqDriver(): Transport
+    {
+        if (! class_exists(AMQPStreamConnection::class)) {
+            throw new \LogicException('The rabbitmq transport needs php-amqplib: composer require php-amqplib/php-amqplib');
+        }
+
+        $config = $this->config->get('outbox.transports.rabbitmq');
+
+        return RabbitMqTransport::fromConfig(is_array($config) ? $config : [], $this->source());
     }
 
     private function setting(string $transport, string $key): ?string
